@@ -19,17 +19,6 @@ export async function deriveKeyMaterial(
     throw new Error("Web Crypto API (crypto.subtle) is not available in this environment.");
   }
 
-  let ikm: ArrayBuffer; // Input Keying Material
-  if (typeof inputKey === 'string') {
-    // Assume UTF-8 encoding for string keys
-    const encoded = new TextEncoder().encode(inputKey);
-    ikm = encoded.buffer instanceof ArrayBuffer ? encoded.buffer : encoded.slice().buffer;
-  } else if (inputKey instanceof Uint8Array) {
-    ikm = inputKey.buffer instanceof ArrayBuffer ? inputKey.buffer : inputKey.slice().buffer;
-  } else {
-    throw new Error("Input key must be a string or Uint8Array.");
-  }
-
   // Get the source Uint8Array first
   const ikmSource = (typeof inputKey === 'string')
     ? new TextEncoder().encode(inputKey)

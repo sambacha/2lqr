@@ -17,7 +17,8 @@ export function encode(message: Uint16Array, numEccSymbols: number): Uint16Array
 
   // Create the message polynomial shifted left by the number of ECC symbols
   // This is equivalent to multiplying the message polynomial by x^numEccSymbols
-  const shiftedMessage = new Uint16Array(message.length + numEccSymbols);
+  // Use messageDegree: message.length = messageDegree + 1
+  const shiftedMessage = new Uint16Array(messageDegree + 1 + numEccSymbols);
   shiftedMessage.set(message, 0); // Copy message coefficients
   // The remaining numEccSymbols coefficients are implicitly zero
 
@@ -31,9 +32,10 @@ export function encode(message: Uint16Array, numEccSymbols: number): Uint16Array
   eccSymbols.set(remainder, remainderOffset); // Pad with leading zeros
 
   // Combine the original message symbols with the ECC symbols
-  const codeword = new Uint16Array(message.length + numEccSymbols);
+  // Use messageDegree: message.length = messageDegree + 1
+  const codeword = new Uint16Array(messageDegree + 1 + numEccSymbols);
   codeword.set(message, 0);
-  codeword.set(eccSymbols, message.length);
+  codeword.set(eccSymbols, messageDegree + 1); // Use messageDegree + 1 for the offset
 
   return codeword;
 }

@@ -10,7 +10,7 @@ export interface PatternDefinition {
 }
 
 // Placeholder draw functions - these will be implemented properly in renderer.ts
-const placeholderDraw = (ctx: any, x: number, y: number, size: number) => { /* Implementation in renderer */ };
+const placeholderDraw = (_ctx: any, _x: number, _y: number, _size: number) => { /* Implementation in renderer */ };
 
 export const PATTERN_DEFINITIONS: PatternDefinition[] = [
     { id: 1, name: "Square Center", draw: placeholderDraw },

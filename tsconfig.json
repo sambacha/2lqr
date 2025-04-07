@@ -3,7 +3,8 @@
   "compilerOptions": {
     "declaration": true, // Added: Required by isolatedDeclarations
     "baseUrl": ".",
-    "outDir": "esm",
+//. "outDir": "esm",
+    "outDir": "./dist", 
     "lib": [
       "dom",
       "es2020"
@@ -11,9 +12,11 @@
     "isolatedDeclarations": true
   },
   "include": [
-    "src"
+    "src/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "**/node_modules",
+    "**/.*/",
+    "src/**/*.test.ts"
   ]
 }

@@ -199,7 +199,8 @@ export function polyDivide(dividend: Uint16Array, divisor: Uint16Array): { quoti
 
     // Align degrees for subtraction (polyAdd handles different lengths)
     const alignedDividend = new Uint16Array(currentDividend.length);
-    const shift = currentDividend.length - termToSubtract.length;
+    // Use subtractDegree here: termToSubtract.length = subtractDegree + 1
+    const shift = currentDividend.length - (subtractDegree + 1);
 
     for(let k=0; k < termToSubtract.length; k++) {
         alignedDividend[k+shift] = termToSubtract[k];

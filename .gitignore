@@ -12,5 +12,12 @@ coverage/
 /esm/abstract
 /abstract/
 .DS_Store
-esm/
 
+
+/crypto
+/dual
+/ecc_qary
+/patterns
+/esm
+/dist
+/types

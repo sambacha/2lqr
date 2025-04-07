@@ -34,7 +34,7 @@ export async function encode2LQR(
     // We need the internal bitmap *before* bordering/scaling.
     // Let's call the internal parts of encodeQR.
 
-    const ecc = opts.ecc ?? 'medium';
+    const ecc: ErrorCorrection = opts.ecc ?? 'medium';
     qrInternals.validateECC(ecc); // Use _tests
     const encoding = opts.encoding ?? qrInternals.detectType(publicData); // Use _tests
     qrInternals.validateEncoding(encoding); // Use _tests
