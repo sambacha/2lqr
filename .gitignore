@@ -11,3 +11,6 @@ coverage/
 /esm/*.d.ts.map
 /esm/abstract
 /abstract/
+.DS_Store
+esm/
+

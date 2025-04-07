@@ -1,6 +1,7 @@
 {
-  "extends": "@paulmillr/jsbt/tsconfig.esm.json",
+   "extends": "./base.tsconfig.json",
   "compilerOptions": {
+    "declaration": true, // Added: Required by isolatedDeclarations
     "baseUrl": ".",
     "outDir": "esm",
     "lib": [

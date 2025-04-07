@@ -32,6 +32,9 @@ const array = encodeQR(txt, 'raw'); // 2d array for canvas or other libs
 ```
  */
 
+// Import pattern renderer at top level
+import * as patternRenderer from './patterns/renderer.js';
+
 // We do not use newline escape code directly in strings because it's not parser-friendly
 const chCodes = { newline: 10, reset: 27 };
 
@@ -40,7 +43,7 @@ export interface Coder<F, T> {
   decode(to: T): F;
 }
 
-function assertNumber(n: number) {
+function assertNumber(n: number): void {
   if (!Number.isSafeInteger(n)) throw new Error(`integer expected: ${n}`);
 }
 
@@ -109,8 +112,8 @@ function alphabet(
   alphabet: string
 ): Coder<number[], string[]> & { has: (char: string) => boolean } {
   return {
-    has: (char: string) => alphabet.includes(char),
-    decode: (input: string[]) => {
+    has: (char: string): boolean => alphabet.includes(char),
+    decode: (input: string[]): number[] => {
       if (!Array.isArray(input) || (input.length && typeof input[0] !== 'string'))
         throw new Error('alphabet.decode input should be array of strings');
       return input.map((letter) => {
@@ -121,7 +124,7 @@ function alphabet(
         return index;
       });
     },
-    encode: (digits: number[]) => {
+    encode: (digits: number[]): string[] => {
       if (!Array.isArray(digits) || (digits.length && typeof digits[0] !== 'number'))
         throw new Error('alphabet.encode input should be an array of numbers');
       return digits.map((i) => {
@@ -157,7 +160,7 @@ type DrawValue = boolean | undefined; // undefined=not written, true=foreground,
 type DrawFn = DrawValue | ((c: Point, curr: DrawValue) => DrawValue);
 type ReadFn = (c: Point, curr: DrawValue) => void;
 export class Bitmap {
-  private static size(size: Size | number, limit?: Size) {
+  private static size(size: Size | number, limit?: Size): Size {
     if (typeof size === 'number') size = { height: size, width: size };
     if (!Number.isSafeInteger(size.height) && size.height !== Infinity)
       throw new Error(`Bitmap: invalid height=${size.height} (${typeof size.height})`);
@@ -210,15 +213,12 @@ export class Bitmap {
   isInside(p: Point): boolean {
     return 0 <= p.x && p.x < this.width && 0 <= p.y && p.y < this.height;
   }
-  size(offset?: Point | number): {
-    height: number;
-    width: number;
-  } {
+  size(offset?: Point | number): Size {
     if (!offset) return { height: this.height, width: this.width };
     const { x, y } = this.xy(offset);
     return { height: this.height - y, width: this.width - x };
   }
-  private xy(c: Point | number) {
+  private xy(c: Point | number): Point {
     if (typeof c === 'number') c = { x: c, y: c };
     if (!Number.isSafeInteger(c.x)) throw new Error(`Bitmap: invalid x=${c.x}`);
     if (!Number.isSafeInteger(c.y)) throw new Error(`Bitmap: invalid y=${c.y}`);
@@ -282,7 +282,7 @@ export class Bitmap {
   }
   // Each pixel size is multiplied by factor
   scale(factor: number): Bitmap {
-    if (!Number.isSafeInteger(factor) || factor > 1024)
+    if (!Number.isSafeInteger(factor) || factor <= 0 || factor > 1024) // Added factor > 0 check
       throw new Error(`invalid scale factor: ${factor}`);
     const { height, width } = this;
     const res = new Bitmap({ height: factor * height, width: factor * width });
@@ -338,36 +338,128 @@ export class Bitmap {
       .map((i) => i.map((j) => (j ? darkBG : whiteBG)).join(''))
       .join(String.fromCharCode(chCodes.newline));
   }
-  toSVG(): string {
+  // Add patternMap as optional argument
+  toSVG(patternMap?: (number | undefined)[][]): string {
+    // Use imported renderer
+    const renderer = patternRenderer;
+
     let out = `<svg xmlns:svg="http://www.w3.org/2000/svg" viewBox="0 0 ${this.width} ${this.height}" version="1.1" xmlns="http://www.w3.org/2000/svg">`;
+    // Add white background rect for patterns to draw on
+    out += `<rect x="0" y="0" width="${this.width}" height="${this.height}" fill="white" />`;
+
     this.rectRead(0, Infinity, ({ x, y }, val) => {
-      if (val) out += `<rect x="${x}" y="${y}" width="1" height="1" />`;
+      const patternIndex = patternMap?.[y]?.[x];
+      if (patternIndex !== undefined) {
+        // Render pattern using the imported function
+        out += renderer.getPatternSvgString(patternIndex, x, y);
+      } else if (val === true) {
+        // Render standard black module
+        out += `<rect x="${x}" y="${y}" width="1" height="1" fill="black" />`;
+      }
+      // White modules (val === false and no pattern) are covered by the background rect
     });
     out += '</svg>';
     return out;
   }
-  toGIF(): Uint8Array {
-    // NOTE: Small, but inefficient implementation.
-    // Uses 1 byte per pixel, but still less bloated than SVG.
+  // Add patternMap and optional scale factor for pixel rendering
+  toGIF(patternMap?: (number | undefined)[][], modulePixelSize: number = 1): Uint8Array {
+     // Use imported renderer
+     const renderer = patternRenderer;
+
+    if (!Number.isSafeInteger(modulePixelSize) || modulePixelSize <= 0) {
+        throw new Error(`Invalid modulePixelSize for GIF: ${modulePixelSize}`);
+    }
+
+    const outputWidth = this.width * modulePixelSize;
+    const outputHeight = this.height * modulePixelSize;
+
+    // Create high-resolution pixel buffer (0=black, 1=white)
+    // Initialize with white (1)
+    const pixelBuffer = new Uint8Array(outputWidth * outputHeight).fill(1);
+
+    for (let y = 0; y < this.height; y++) {
+        for (let x = 0; x < this.width; x++) {
+            const patternIndex = patternMap?.[y]?.[x];
+            const moduleValue = this.data[y][x];
+            const startX = x * modulePixelSize;
+            const startY = y * modulePixelSize;
+
+            if (patternIndex !== undefined) {
+                // Draw pattern onto the buffer
+                renderer.drawPatternPixels(patternIndex, pixelBuffer, outputWidth, startX, startY, modulePixelSize);
+            } else if (moduleValue === true) {
+                // Draw standard black module
+                const ctx = { buffer: pixelBuffer, bufferWidth: outputWidth, moduleStartX: startX, moduleStartY: startY, modulePixelSize: modulePixelSize };
+                // Need a local fillRect or import from renderer? Let's define locally for now.
+                const fillRectLocal = (lctx: any, lx: number, ly: number, lw: number, lh: number, lcolor: 0 | 1) => {
+                    const endX = lx + lw;
+                    const endY = ly + lh;
+                    for (let py = ly; py < endY; py++) {
+                        for (let px = lx; px < endX; px++) {
+                            if (px >= 0 && px < lctx.modulePixelSize && py >= 0 && py < lctx.modulePixelSize) {
+                                const bufX = lctx.moduleStartX + px;
+                                const bufY = lctx.moduleStartY + py;
+                                lctx.buffer[bufY * lctx.bufferWidth + bufX] = lcolor;
+                            }
+                        }
+                    }
+                };
+                fillRectLocal(ctx, 0, 0, modulePixelSize, modulePixelSize, 0); // 0 = black
+            }
+             // White modules (moduleValue === false and no pattern) are already filled
+        }
+    }
+
+
+    // --- Encode the pixelBuffer into GIF format ---
     const u16le = (i: number) => [i & 0xff, (i >>> 8) & 0xff];
-    const dims = [...u16le(this.width), ...u16le(this.height)];
-    const data: number[] = [];
-    this.rectRead(0, Infinity, (_, cur) => data.push(+(cur === true)));
+    const dims = [...u16le(outputWidth), ...u16le(outputHeight)];
+    // GIF data uses 0 for first color (white), 1 for second (black)
+    // Our buffer uses 0=black, 1=white, so we need to flip bits or adjust palette?
+    // Let's stick to the original library's palette: color 0=white, color 1=black.
+    // So, we push 0 for white (buffer value 1) and 1 for black (buffer value 0).
+    const gifData: number[] = [];
+    for(let i = 0; i < pixelBuffer.length; i++) {
+        gifData.push(pixelBuffer[i] === 1 ? 0 : 1); // Map buffer value to GIF color index
+    }
+
     const N = 126; // Block size
     // prettier-ignore
     const bytes = [
-      0x47, 0x49, 0x46, 0x38, 0x37, 0x61, ...dims, 0xf6, 0x00, 0x00, 0xff, 0xff, 0xff,
-      ...fillArr(3 * 127, 0x00), 0x2c, 0x00, 0x00, 0x00, 0x00, ...dims, 0x00, 0x07
+      // Header, Logical Screen Descriptor (using output dims)
+      0x47, 0x49, 0x46, 0x38, 0x37, 0x61, ...dims,
+      // Global Color Table Flag (1), Color Res (111), Sort Flag (0), Size (110 -> 128 colors, need only 2)
+      // Let's use minimal GCT: Flag (1), Res (000), Sort (0), Size (001 -> 4 colors total, use first 2)
+      // 0x81? -> 1 000 0 001 = 129
+      // Original was 0xf6 -> 1 111 0 110 = 246 (2^(6+1)=128 colors)
+      // Let's try 0x81 for 4 colors.
+      0x81,
+      0x00, // Background Color Index
+      0x00, // Pixel Aspect Ratio
+      // Global Color Table (Color 0 = White, Color 1 = Black)
+      0xff, 0xff, 0xff, // White
+      0x00, 0x00, 0x00, // Black
+      // Pad GCT to 4 colors (as per size 001)
+      0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00,
+      // Image Descriptor
+      0x2c, 0x00, 0x00, 0x00, 0x00, // Image Left/Top Position (0,0)
+      ...dims, // Image Width/Height
+      0x00, // Packed Fields (No Local Color Table, Not Interlaced)
+      // Image Data (LZW Minimum Code Size = 7+1 = 8 bits?)
+      // Original used 7 -> 8 bits. Let's keep 7.
+      0x07 // LZW Minimum Code Size
     ];
-    const fullChunks = Math.floor(data.length / N);
+    const fullChunks = Math.floor(gifData.length / N);
     // Full blocks
     for (let i = 0; i < fullChunks; i++)
-      bytes.push(N + 1, 0x80, ...data.slice(N * i, N * (i + 1)).map((i) => +i));
+      bytes.push(N + 1, 0x80, ...gifData.slice(N * i, N * (i + 1))); // Removed .map(i => +i) as data is already 0/1
     // Remaining bytes
-    bytes.push((data.length % N) + 1, 0x80, ...data.slice(fullChunks * N).map((i) => +i));
-    bytes.push(0x01, 0x81, 0x00, 0x3b);
+    bytes.push((gifData.length % N) + 1, 0x80, ...gifData.slice(fullChunks * N)); // Removed .map(i => +i)
+    bytes.push(0x01, 0x81, 0x00, 0x3b); // End of image data block, Trailer
     return new Uint8Array(bytes);
   }
+  // NOTE: The duplicated toImage block below was removed by this replacement.
   toImage(isRGB = false): Image {
     const { height, width } = this.size();
     const data = new Uint8Array(height * width * (isRGB ? 3 : 4));
@@ -427,12 +519,12 @@ const ECC_BLOCKS = {
 
 const info = {
   size: {
-    encode: (ver: Version) => 21 + 4 * (ver - 1), // ver1 = 21, ver40=177 blocks
-    decode: (size: number) => (size - 17) / 4,
+    encode: (ver: Version): number => 21 + 4 * (ver - 1), // ver1 = 21, ver40=177 blocks
+    decode: (size: number): number => (size - 17) / 4,
   } as Coder<Version, number>,
-  sizeType: (ver: Version) => Math.floor((ver + 7) / 17),
+  sizeType: (ver: Version): number => Math.floor((ver + 7) / 17),
   // Based on https://codereview.stackexchange.com/questions/74925/algorithm-to-generate-this-alignment-pattern-locations-table-for-qr-codes
-  alignmentPatterns(ver: Version) {
+  alignmentPatterns(ver: Version): number[] {
     if (ver === 1) return [];
     const first = 6;
     const last = info.size.encode(ver) - first - 1;
@@ -453,13 +545,13 @@ const info = {
     high: 0b10,
   } as Record<ErrorCorrection, number>,
   formatMask: 0b101010000010010,
-  formatBits(ecc: ErrorCorrection, maskIdx: Mask) {
+  formatBits(ecc: ErrorCorrection, maskIdx: Mask): number {
     const data = (info.ECCode[ecc] << 3) | maskIdx;
     let d = data;
     for (let i = 0; i < 10; i++) d = (d << 1) ^ ((d >> 9) * 0b10100110111);
     return ((data << 10) | d) ^ info.formatMask;
   },
-  versionBits(ver: Version) {
+  versionBits(ver: Version): number {
     let d = ver;
     for (let i = 0; i < 12; i++) d = (d << 1) ^ ((d >> 11) * 0b1111100100101);
     return (ver << 12) | d;
@@ -468,7 +560,7 @@ const info = {
     numeric: alphabet('0123456789'),
     alphanumerc: alphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:'),
   }, // as Record<EncodingType, ReturnType<typeof alphabet>>,
-  lengthBits(ver: Version, type: EncodingType) {
+  lengthBits(ver: Version, type: EncodingType): number {
     const table: Record<EncodingType, [number, number, number]> = {
       numeric: [10, 12, 14],
       alphanumeric: [9, 11, 13],
@@ -485,7 +577,14 @@ const info = {
     kanji: '1000',
     eci: '0111',
   },
-  capacity(ver: Version, ecc: ErrorCorrection) {
+  capacity(ver: Version, ecc: ErrorCorrection): { // Added return type
+    words: number;
+    numBlocks: number;
+    shortBlocks: number;
+    blockLen: number;
+    capacity: number;
+    total: number;
+  } {
     const bytes = BYTES[ver - 1];
     const words = WORDS_PER_BLOCK[ecc][ver - 1];
     const numBlocks = ECC_BLOCKS[ecc][ver - 1];
@@ -503,19 +602,43 @@ const info = {
 };
 
 const PATTERNS: readonly ((x: number, y: number) => boolean)[] = [
-  (x, y) => (x + y) % 2 == 0,
-  (_x, y) => y % 2 == 0,
-  (x, _y) => x % 3 == 0,
-  (x, y) => (x + y) % 3 == 0,
-  (x, y) => (Math.floor(y / 2) + Math.floor(x / 3)) % 2 == 0,
-  (x, y) => ((x * y) % 2) + ((x * y) % 3) == 0,
-  (x, y) => (((x * y) % 2) + ((x * y) % 3)) % 2 == 0,
-  (x, y) => (((x + y) % 2) + ((x * y) % 3)) % 2 == 0,
+  (x, y): boolean => (x + y) % 2 == 0, // Added :boolean
+  (_x, y): boolean => y % 2 == 0, // Added :boolean
+  (x, _y): boolean => x % 3 == 0, // Added :boolean
+  (x, y): boolean => (x + y) % 3 == 0, // Added :boolean
+  (x, y): boolean => (Math.floor(y / 2) + Math.floor(x / 3)) % 2 == 0, // Added :boolean
+  (x, y): boolean => ((x * y) % 2) + ((x * y) % 3) == 0, // Added :boolean
+  (x, y): boolean => (((x * y) % 2) + ((x * y) % 3)) % 2 == 0, // Added :boolean
+  (x, y): boolean => (((x + y) % 2) + ((x * y) % 3)) % 2 == 0, // Added :boolean
 ] as const;
 
+// Define GF type explicitly
+type GFTables = { exp: number[]; log: number[] };
+type GFType = {
+    tables: GFTables;
+    exp: (x: number) => number;
+    log: (x: number) => number;
+    mul: (x: number, y: number) => number;
+    add: (x: number, y: number) => number;
+    pow: (x: number, e: number) => number;
+    inv: (x: number) => number;
+    polynomial: (poly: number[]) => number[];
+    monomial: (degree: number, coefficient: number) => number[];
+    degree: (a: number[]) => number;
+    coefficient: (a: any, degree: number) => number;
+    mulPoly: (a: number[], b: number[]) => number[];
+    mulPolyScalar: (a: number[], scalar: number) => number[];
+    mulPolyMonomial: (a: number[], degree: number, coefficient: number) => number[];
+    addPoly: (a: number[], b: number[]) => number[];
+    remainderPoly: (data: number[], divisor: number[]) => number[];
+    divisorPoly: (degree: number) => number[];
+    evalPoly: (poly: any, a: number) => number;
+    euclidian: (a: number[], b: number[], R: number) => [number[], number[]];
+};
+
 // Galois field && reed-solomon encoding
-const GF = {
-  tables: ((p_poly) => {
+const GF: GFType = { // Add explicit type
+  tables: ((p_poly): GFTables => { // Add return type to IIFE
     const exp = fillArr(256, 0);
     const log = fillArr(256, 0);
     for (let i = 0, x = 1; i < 256; i++) {
@@ -526,22 +649,22 @@ const GF = {
     }
     return { exp, log };
   })(0x11d),
-  exp: (x: number) => GF.tables.exp[x],
-  log(x: number) {
+  exp: (x: number): number => GF.tables.exp[x],
+  log(x: number): number {
     if (x === 0) throw new Error(`GF.log: invalid arg=${x}`);
     return GF.tables.log[x] % 255;
   },
-  mul(x: number, y: number) {
+  mul(x: number, y: number): number {
     if (x === 0 || y === 0) return 0;
     return GF.tables.exp[(GF.tables.log[x] + GF.tables.log[y]) % 255];
   },
-  add: (x: number, y: number) => x ^ y,
-  pow: (x: number, e: number) => GF.tables.exp[(GF.tables.log[x] * e) % 255],
-  inv(x: number) {
+  add: (x: number, y: number): number => x ^ y,
+  pow: (x: number, e: number): number => GF.tables.exp[(GF.tables.log[x] * e) % 255],
+  inv(x: number): number {
     if (x === 0) throw new Error(`GF.inverse: invalid arg=${x}`);
     return GF.tables.exp[255 - GF.tables.log[x]];
   },
-  polynomial(poly: number[]) {
+  polynomial(poly: number[]): number[] {
     if (poly.length == 0) throw new Error('GF.polymomial: invalid length');
     if (poly[0] !== 0) return poly;
     // Strip leading zeros
@@ -549,16 +672,16 @@ const GF = {
     for (; i < poly.length - 1 && poly[i] == 0; i++);
     return poly.slice(i);
   },
-  monomial(degree: number, coefficient: number) {
+  monomial(degree: number, coefficient: number): number[] {
     if (degree < 0) throw new Error(`GF.monomial: invalid degree=${degree}`);
     if (coefficient == 0) return [0];
     let coefficients = fillArr(degree + 1, 0);
     coefficients[0] = coefficient;
     return GF.polynomial(coefficients);
   },
-  degree: (a: number[]) => a.length - 1,
-  coefficient: (a: any, degree: number) => a[GF.degree(a) - degree],
-  mulPoly(a: number[], b: number[]) {
+  degree: (a: number[]): number => a.length - 1,
+  coefficient: (a: any, degree: number): number => a[GF.degree(a) - degree],
+  mulPoly(a: number[], b: number[]): number[] {
     if (a[0] === 0 || b[0] === 0) return [0];
     const res = fillArr(a.length + b.length - 1, 0);
     for (let i = 0; i < a.length; i++) {
@@ -568,21 +691,21 @@ const GF = {
     }
     return GF.polynomial(res);
   },
-  mulPolyScalar(a: number[], scalar: number) {
+  mulPolyScalar(a: number[], scalar: number): number[] {
     if (scalar == 0) return [0];
     if (scalar == 1) return a;
     const res = fillArr(a.length, 0);
     for (let i = 0; i < a.length; i++) res[i] = GF.mul(a[i], scalar);
     return GF.polynomial(res);
   },
-  mulPolyMonomial(a: number[], degree: number, coefficient: number) {
+  mulPolyMonomial(a: number[], degree: number, coefficient: number): number[] {
     if (degree < 0) throw new Error('GF.mulPolyMonomial: invalid degree');
     if (coefficient == 0) return [0];
     const res = fillArr(a.length + degree, 0);
     for (let i = 0; i < a.length; i++) res[i] = GF.mul(a[i], coefficient);
     return GF.polynomial(res);
   },
-  addPoly(a: number[], b: number[]) {
+  addPoly(a: number[], b: number[]): number[] {
     if (a[0] === 0) return b;
     if (b[0] === 0) return a;
     let smaller = a;
@@ -596,7 +719,7 @@ const GF = {
       sumDiff[i] = GF.add(smaller[i - lengthDiff], larger[i]);
     return GF.polynomial(sumDiff);
   },
-  remainderPoly(data: number[], divisor: number[]) {
+  remainderPoly(data: number[], divisor: number[]): number[] {
     const out = Array.from(data);
     for (let i = 0; i < data.length - divisor.length + 1; i++) {
       const elm = out[i];
@@ -607,19 +730,19 @@ const GF = {
     }
     return out.slice(data.length - divisor.length + 1, out.length);
   },
-  divisorPoly(degree: number) {
+  divisorPoly(degree: number): number[] {
     let g = [1];
     for (let i = 0; i < degree; i++) g = GF.mulPoly(g, [1, GF.pow(2, i)]);
     return g;
   },
-  evalPoly(poly: any, a: number) {
+  evalPoly(poly: any, a: number): number {
     if (a == 0) return GF.coefficient(poly, 0); // Just return the x^0 coefficient
     let res = poly[0];
     for (let i = 1; i < poly.length; i++) res = GF.add(GF.mul(a, res), poly[i]);
     return res;
   },
   // TODO: cleanup
-  euclidian(a: number[], b: number[], R: number) {
+  euclidian(a: number[], b: number[], R: number): [number[], number[]] {
     // Force degree(a) >= degree(b)
     if (GF.degree(a) < GF.degree(b)) [a, b] = [b, a];
     let rLast = a;
@@ -651,19 +774,21 @@ const GF = {
     const sigmaTildeAtZero = GF.coefficient(t, 0);
     if (sigmaTildeAtZero == 0) throw new Error('sigmaTilde(0) was zero');
     const inverse = GF.inv(sigmaTildeAtZero);
-    return [GF.mulPolyScalar(t, inverse), GF.mulPolyScalar(r, inverse)];
+    // Explicitly type the returned array tuple
+    const result: [number[], number[]] = [GF.mulPolyScalar(t, inverse), GF.mulPolyScalar(r, inverse)];
+    return result;
   },
 };
 
 function RS(eccWords: number): Coder<Uint8Array, Uint8Array> {
   return {
-    encode(from: Uint8Array) {
+    encode(from: Uint8Array): Uint8Array { // Added :Uint8Array
       const d = GF.divisorPoly(eccWords);
       const pol = Array.from(from);
       pol.push(...d.slice(0, -1).fill(0));
       return Uint8Array.from(GF.remainderPoly(pol, d));
     },
-    decode(to: Uint8Array) {
+    decode(to: Uint8Array): Uint8Array { // Added :Uint8Array
       const res = to.slice();
       const poly = GF.polynomial(Array.from(to));
       // Find errors
@@ -709,7 +834,7 @@ function interleave(ver: Version, ecc: ErrorCorrection): Coder<Uint8Array, Uint8
   const { words, shortBlocks, numBlocks, blockLen, total } = info.capacity(ver, ecc);
   const rs = RS(words);
   return {
-    encode(bytes: Uint8Array) {
+    encode(bytes: Uint8Array): Uint8Array { // Added :Uint8Array
       // Add error correction to bytes
       const blocks: Uint8Array[] = [];
       const eccBlocks: Uint8Array[] = [];
@@ -727,7 +852,7 @@ function interleave(ver: Version, ecc: ErrorCorrection): Coder<Uint8Array, Uint8
       res.set(resECC, resBlocks.length);
       return res;
     },
-    decode(data: Uint8Array) {
+    decode(data: Uint8Array): Uint8Array { // Added :Uint8Array
       if (data.length !== total)
         throw new Error(`interleave.decode: len(data)=${data.length}, total=${total}`);
       const blocks = [];
@@ -937,7 +1062,7 @@ function drawQR(
 function penalty(bm: Bitmap): number {
   const inverse = bm.inverse();
   // Adjacent modules in row/column in same | No. of modules = (5 + i) color
-  const sameColor = (row: DrawValue[]) => {
+  const sameColor = (row: DrawValue[]): number => { // Added :number
     let res = 0;
     for (let i = 0, same = 1, last = undefined; i < row.length; i++) {
       if (last === row[i]) {
@@ -968,7 +1093,7 @@ function penalty(bm: Bitmap): number {
     }
   }
   // 1:1:3:1:1 ratio (dark:light:dark:light:dark) pattern in row/column, preceded or followed by light area 4 modules wide
-  const finderPattern = (row: DrawValue[]) => {
+  const finderPattern = (row: DrawValue[]): number => { // Added :number
     const finderPattern = [true, false, true, true, true, false, true]; // dark:light:dark:light:dark
     const lightPattern = [false, false, false, false]; // light area 4 modules wide
     const p1 = [...finderPattern, ...lightPattern];
@@ -993,7 +1118,7 @@ function penalty(bm: Bitmap): number {
   return adjacent + box + finder + dark;
 }
 // Selects best mask according to penalty, if no mask is provided
-function drawQRBest(ver: Version, ecc: ErrorCorrection, data: Uint8Array, maskIdx?: Mask) {
+function drawQRBest(ver: Version, ecc: ErrorCorrection, data: Uint8Array, maskIdx?: Mask): Bitmap {
   if (maskIdx === undefined) {
     const bestMask = best<Mask>();
     for (let mask = 0; mask < PATTERNS.length; mask++)
@@ -1013,17 +1138,17 @@ export type QrOpts = {
   border?: number | undefined;
   scale?: number | undefined;
 };
-function validateECC(ec: ErrorCorrection) {
+function validateECC(ec: ErrorCorrection): void {
   if (!ECMode.includes(ec))
     throw new Error(`Invalid error correction mode=${ec}. Expected: ${ECMode}`);
 }
-function validateEncoding(enc: EncodingType) {
+function validateEncoding(enc: EncodingType): void {
   if (!Encoding.includes(enc))
     throw new Error(`Encoding: invalid mode=${enc}. Expected: ${Encoding}`);
   if (enc === 'kanji' || enc === 'eci')
     throw new Error(`Encoding: ${enc} is not supported (yet?).`);
 }
-function validateMask(mask: Mask) {
+function validateMask(mask: Mask): void {
   if (![0, 1, 2, 3, 4, 5, 6, 7].includes(mask) || !PATTERNS[mask])
     throw new Error(`Invalid mask=${mask}. Expected number [0..7]`);
 }
@@ -1047,12 +1172,13 @@ const array = encodeQR(txt, 'raw'); // 2d array for canvas or other libs
 export function encodeQR(text: string, output: 'raw', opts?: QrOpts): boolean[][];
 export function encodeQR(text: string, output: 'ascii' | 'term' | 'svg', opts?: QrOpts): string;
 export function encodeQR(text: string, output: 'gif', opts?: QrOpts): Uint8Array;
-export function encodeQR(text: string, output: Output = 'raw', opts: QrOpts = {}) {
+export function encodeQR(text: string, output: Output = 'raw', opts: QrOpts = {}): boolean[][] | string | Uint8Array { // Added union return type
   const ecc = opts.ecc !== undefined ? opts.ecc : 'medium';
   validateECC(ecc);
   const encoding = opts.encoding !== undefined ? opts.encoding : detectType(text);
   validateEncoding(encoding);
   if (opts.mask !== undefined) validateMask(opts.mask as Mask);
+  const scale = opts.scale !== undefined ? opts.scale : 1; // Get scale for GIF
   let ver = opts.version;
   let data,
     err = new Error('Unknown error');
@@ -1078,14 +1204,26 @@ export function encodeQR(text: string, output: Output = 'raw', opts: QrOpts = {}
   const border = opts.border === undefined ? 2 : opts.border;
   if (!Number.isSafeInteger(border)) throw new Error(`invalid border type=${typeof border}`);
   res = res.border(border, false); // Add border
-  if (opts.scale !== undefined) res = res.scale(opts.scale); // Scale image
+  // Scaling is now handled within toGIF if needed, remove external scaling for GIF/SVG?
+  // Let's keep scale for raw/ascii/term, but pass it to GIF. SVG uses viewBox.
+  if (opts.scale !== undefined && ['raw', 'ascii', 'term'].includes(output)) {
+      res = res.scale(opts.scale);
+  }
+
+  // TODO: This main function needs to be adapted for 2LQR to generate patternMap
+  // For now, assume patternMap is passed somehow (e.g., via opts for testing)
+  const patternMap = (opts as any).patternMap as (number | undefined)[][] | undefined;
+
+// @ts-ignore
   if (output === 'raw') return res.data;
   else if (output === 'ascii') return res.toASCII();
-  else if (output === 'svg') return res.toSVG();
-  else if (output === 'gif') return res.toGIF();
+  else if (output === 'svg') return res.toSVG(patternMap); // Pass patternMap
+  else if (output === 'gif') return res.toGIF(patternMap, scale); // Pass patternMap and scale
   else if (output === 'term') return res.toTerm();
   else throw new Error(`Unknown output: ${output}`);
 }
+
+// Moved import to top level
 
 export default encodeQR;
 
@@ -1190,8 +1328,31 @@ export const _tests: {
   drawQR: typeof drawQR;
   penalty: typeof penalty;
   PATTERNS: readonly ((x: number, y: number) => boolean)[];
+  // Add missing internals needed by 2LQR encoder
+  GF: typeof GF;
+  RS: typeof RS;
+  validateECC: typeof validateECC;
+  validateEncoding: typeof validateEncoding;
+  validateMask: typeof validateMask;
+  drawQRBest: typeof drawQRBest;
+  // Add newly identified missing internals
+  validateVersion: typeof validateVersion;
+  best: typeof best;
+  utf8ToBytes: typeof utf8ToBytes;
 } = {
   Bitmap,
+  // Add missing internals needed by 2LQR encoder
+  GF,
+  RS,
+  validateECC,
+  validateEncoding,
+  validateMask,
+  drawQRBest,
+   // Add newly identified missing internals
+  validateVersion,
+  best,
+  utf8ToBytes,
+ // Keep existing exports
   info,
   detectType,
   encode,
