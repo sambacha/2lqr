@@ -35,6 +35,16 @@ const array = encodeQR(txt, 'raw'); // 2d array for canvas or other libs
 // Import pattern renderer at top level
 import * as patternRenderer from './patterns/renderer.js';
 
+// Export 2LQR specific functions and types
+export { encode2LQR } from './dual/encoder.js';
+export type { Encode2LQROptions, PatternMap } from './dual/encoder.js';
+
+// Export standard decoder function
+export { decodeQR } from './decode.js';
+// Potentially export decoder types if needed by the example
+// export type { DecodeOpts } from './decode.js';
+
+
 // We do not use newline escape code directly in strings because it's not parser-friendly
 const chCodes = { newline: 10, reset: 27 };
 
@@ -883,6 +893,64 @@ function interleave(ver: Version, ecc: ErrorCorrection): Coder<Uint8Array, Uint8
   };
 }
 
+// Define and export utils earlier to prevent initialization errors
+export const utils: {
+  best: typeof best;
+  bin: typeof bin;
+  drawTemplate: typeof drawTemplate;
+  fillArr: typeof fillArr;
+  info: {
+    size: Coder<Version, number>;
+    sizeType: (ver: Version) => number;
+    // Based on https://codereview.stackexchange.com/questions/74925/algorithm-to-generate-this-alignment-pattern-locations-table-for-qr-codes
+    alignmentPatterns(ver: Version): number[];
+    ECCode: Record<ErrorCorrection, number>;
+    formatMask: number;
+    formatBits(ecc: ErrorCorrection, maskIdx: Mask): number;
+    versionBits(ver: Version): number;
+    alphabet: {
+      numeric: Coder<number[], string[]> & {
+        has: (char: string) => boolean;
+      };
+      alphanumerc: Coder<number[], string[]> & {
+        has: (char: string) => boolean;
+      };
+    };
+    lengthBits(ver: Version, type: EncodingType): number;
+    modeBits: {
+      numeric: string;
+      alphanumeric: string;
+      byte: string;
+      kanji: string;
+      eci: string;
+    };
+    capacity(
+      ver: Version,
+      ecc: ErrorCorrection
+    ): {
+      words: number;
+      numBlocks: number;
+      shortBlocks: number;
+      blockLen: number;
+      capacity: number;
+      total: number;
+    };
+  };
+  interleave: typeof interleave;
+  validateVersion: typeof validateVersion;
+  zigzag: typeof zigzag;
+} = {
+  best,
+  bin,
+  drawTemplate,
+  fillArr,
+  info,
+  interleave,
+  validateVersion,
+  zigzag,
+};
+
+
 // Draw
 // Generic template per version+ecc+mask. Can be cached, to speedup calculations.
 function drawTemplate(
@@ -1226,62 +1294,6 @@ export function encodeQR(text: string, output: Output = 'raw', opts: QrOpts = {}
 // Moved import to top level
 
 export default encodeQR;
-
-export const utils: {
-  best: typeof best;
-  bin: typeof bin;
-  drawTemplate: typeof drawTemplate;
-  fillArr: typeof fillArr;
-  info: {
-    size: Coder<Version, number>;
-    sizeType: (ver: Version) => number;
-    // Based on https://codereview.stackexchange.com/questions/74925/algorithm-to-generate-this-alignment-pattern-locations-table-for-qr-codes
-    alignmentPatterns(ver: Version): number[];
-    ECCode: Record<ErrorCorrection, number>;
-    formatMask: number;
-    formatBits(ecc: ErrorCorrection, maskIdx: Mask): number;
-    versionBits(ver: Version): number;
-    alphabet: {
-      numeric: Coder<number[], string[]> & {
-        has: (char: string) => boolean;
-      };
-      alphanumerc: Coder<number[], string[]> & {
-        has: (char: string) => boolean;
-      };
-    };
-    lengthBits(ver: Version, type: EncodingType): number;
-    modeBits: {
-      numeric: string;
-      alphanumeric: string;
-      byte: string;
-      kanji: string;
-      eci: string;
-    };
-    capacity(
-      ver: Version,
-      ecc: ErrorCorrection
-    ): {
-      words: number;
-      numBlocks: number;
-      shortBlocks: number;
-      blockLen: number;
-      capacity: number;
-      total: number;
-    };
-  };
-  interleave: typeof interleave;
-  validateVersion: typeof validateVersion;
-  zigzag: typeof zigzag;
-} = {
-  best,
-  bin,
-  drawTemplate,
-  fillArr,
-  info,
-  interleave,
-  validateVersion,
-  zigzag,
-};
 
 // Unsafe API utils, exported only for tests
 export const _tests: {

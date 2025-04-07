@@ -872,8 +872,25 @@ export function decodeQR(img: Image, opts: DecodeOpts = {}): string {
   if (opts.imageOnBitmap) opts.imageOnBitmap(bmp.toImage());
   const { bits, points } = detect(bmp);
   if (opts.pointsOnDetect) {
-    const p = points.map((i) => ({ ...i, ...pointAdd(i, offset) })) as FinderPoints;
-    opts.pointsOnDetect(p);
+    // Handle the mixed types in FinderPoints: [Pattern, Pattern, Point, Pattern]
+    const p = points.map((i, index) => {
+        const addedPoint = pointAdd(i, offset);
+        if (index === 2) { // The third element (index 2) is the Point (BR estimate)
+            return addedPoint; // Just return the offset-adjusted Point
+        } else { // The other elements are Patterns
+            // Cast 'i' to Pattern here, assuming it's safe because index !== 2
+            const patternElement = i as Pattern;
+            return {
+                x: addedPoint.x,
+                y: addedPoint.y,
+                moduleSize: patternElement.moduleSize,
+                count: patternElement.count,
+            };
+        }
+    }); // Remove 'as FinderPoints' assertion
+    // Note: This might cause type issues later if opts.pointsOnDetect strictly expects the tuple.
+    // We might need to cast 'p' when calling opts.pointsOnDetect if necessary.
+    opts.pointsOnDetect(p as FinderPoints); // Add assertion here instead? Or check opts.pointsOnDetect signature. Let's try asserting here.
   }
   if (opts.imageOnDetect) opts.imageOnDetect(bits.toImage());
   const res = decodeBitmap(bits);
@@ -883,15 +900,23 @@ export function decodeQR(img: Image, opts: DecodeOpts = {}): string {
 
 export default decodeQR;
 
-// Unsafe API utils, exported only for tests
-export const _tests: {
+// Define the type for the exported test utilities explicitly
+type DecodeTestsType = {
   toBitmap: typeof toBitmap;
   decodeBitmap: typeof decodeBitmap;
   findFinder: typeof findFinder;
   detect: typeof detect;
-} = {
-  toBitmap,
-  decodeBitmap,
-  findFinder,
-  detect,
+  parseInfo: typeof parseInfo;
+  readInfoBits: typeof readInfoBits;
+};
+
+// Unsafe API utils, exported only for tests
+// Assign properties explicitly without shorthand, with type annotation
+export const _tests: DecodeTestsType = {
+  toBitmap: toBitmap,
+  decodeBitmap: decodeBitmap,
+  findFinder: findFinder,
+  detect: detect,
+  parseInfo: parseInfo,
+  readInfoBits: readInfoBits,
 };

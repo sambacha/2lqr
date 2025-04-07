@@ -4,7 +4,7 @@
     "declaration": true, // Added: Required by isolatedDeclarations
     "baseUrl": ".",
 //. "outDir": "esm",
-    "outDir": "./dist", 
+    "outDir": "vite-example/dist", 
     "lib": [
       "dom",
       "es2020"

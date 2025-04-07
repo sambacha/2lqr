@@ -173,3 +173,5 @@ export async function encode2LQR(
     // 7. Return result (without border/scaling applied here)
     return { bitmap: baseBitmap, patternMap, version, mask: finalMask };
 }
+
+export { Bitmap }

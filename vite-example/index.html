@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>2LQR Encoder Example</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1>2LQR Encoder</h1>
+
+      <div class="form-group">
+        <label for="public-data">Public Data:</label>
+        <textarea id="public-data" rows="3">Hello Public World!</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="private-data">Private Data:</label>
+        <textarea id="private-data" rows="3">Secret Message</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="private-key">Private Key:</label>
+        <input type="text" id="private-key" value="correct horse battery staple" />
+      </div>
+
+      <button id="generate-button">Generate QR Code</button>
+
+      <h2>Generated QR Code:</h2>
+      <div id="qr-code-container">
+        <!-- SVG will be inserted here -->
+      </div>
+
+      <h2>Debug Information:</h2>
+      <div class="tabs">
+        <button class="tab-button active" data-tab="params">Parameters</button>
+        <button class="tab-button" data-tab="patterns">Pattern Map</button>
+        <button class="tab-button" data-tab="timing">Timings</button>
+        <button class="tab-button" data-tab="errors">Errors</button>
+      </div>
+
+      <div id="debug-info">
+        <div id="params-content" class="tab-content active">
+          <pre>Click "Generate" to see parameters...</pre>
+        </div>
+        <div id="patterns-content" class="tab-content">
+          <pre>Click "Generate" to see pattern map...</pre>
+        </div>
+        <div id="timing-content" class="tab-content">
+          <pre>Click "Generate" to see timings...</pre>
+        </div>
+         <div id="errors-content" class="tab-content">
+          <pre>No errors yet.</pre>
+        </div>
+      </div>
+
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
