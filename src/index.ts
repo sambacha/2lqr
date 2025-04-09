@@ -203,7 +203,8 @@ const array = encodeQR(txt, 'raw'); // 2d array for canvas or other libs
 ```
  */
 export function encodeQR(text: string, output: 'raw', opts?: QrOpts): boolean[][];
-export function encodeQR(text: string, output: 'ascii' | 'term' | 'svg', opts?: QrOpts): string;
+export function encodeQR(text: string, output: 'ascii' | 'term', opts?: QrOpts): string;
+export function encodeQR(text: string, output: 'svg', opts?: QrOpts & SvgQrOpts): string;
 export function encodeQR(text: string, output: 'gif', opts?: QrOpts): Uint8Array;
 export function encodeQR(
   text: string,
