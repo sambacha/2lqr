@@ -11,3 +11,16 @@ coverage/
 /esm/*.d.ts.map
 /esm/abstract
 /abstract/
+.DS_Store
+
+
+/crypto
+/dual
+/ecc_qary
+/patterns
+/esm
+/dist
+/types
+vite-example/
+*.d.ts
+*.map

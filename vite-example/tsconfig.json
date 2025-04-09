@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "baseUrl": ".", // Needed for paths
+    "paths": {
+      "qr2": ["../src/index.ts"], // Map 'qr2' directly to the source entry point
+      "qr2/*": ["../src/*"] // Optional: Map subpath imports if needed
+    },
+
+    /* Bundler mode */
+    "moduleResolution": "bundler", // Keep bundler mode, paths should help it
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src"]
+}

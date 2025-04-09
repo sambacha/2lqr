@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>2LQR Decoder Example</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1>2LQR Decoder</h1>
+      <p><a href="/">Go to Encoder</a></p>
+
+      <div class="form-group">
+        <label for="qr-image-upload">Upload QR Code Image:</label>
+        <input type="file" id="qr-image-upload" accept="image/*" />
+      </div>
+
+      <div id="image-preview-container" style="margin-bottom: 1rem;">
+        <img id="image-preview" src="#" alt="Image Preview" style="max-width: 200px; max-height: 200px; display: none;" />
+      </div>
+
+      <button id="decode-button" disabled>Decode QR Code</button>
+
+      <h2>Decoded Information:</h2>
+      <div id="decode-results">
+        <div class="result-section">
+          <h3>Public Data:</h3>
+          <pre id="public-data-output">Upload an image and click "Decode".</pre>
+        </div>
+        <div class="result-section">
+          <h3>Private Data:</h3>
+          <pre id="private-data-output">Private data decoding not implemented in this example.</pre>
+        </div>
+         <div class="result-section">
+          <h3>Status / Errors:</h3>
+          <pre id="status-output">Ready.</pre>
+        </div>
+      </div>
+
+    </div>
+    <script type="module" src="/src/decode.ts"></script>
+  </body>
+</html>

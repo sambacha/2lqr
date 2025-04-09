@@ -1,18 +1,23 @@
 {
-  "extends": "@paulmillr/jsbt/tsconfig.esm.json",
+   "extends": "./base.tsconfig.json",
   "compilerOptions": {
+    "declaration": true, // Added: Required by isolatedDeclarations
     "baseUrl": ".",
     "outDir": "esm",
+    // "outDir": "vite-example/dist", // Reverted for standalone HTML
     "lib": [
       "dom",
       "es2020"
     ],
-    "isolatedDeclarations": true
+    "isolatedDeclarations": true,
+    "noUnusedLocals": false
   },
   "include": [
-    "src"
+    "src/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "**/node_modules",
+    "**/.*/",
+    "src/**/*.test.ts"
   ]
 }
