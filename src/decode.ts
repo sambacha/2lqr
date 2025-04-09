@@ -24,8 +24,8 @@ limitations under the License.
  */
 
 import type { EncodingType, ErrorCorrection, Image, Point, Mask } from './index.js';
-import { Bitmap, utils } from './index.js';
-const { best, bin, drawTemplate, fillArr, info, interleave, validateVersion, zigzag } = utils;
+import { Bitmap } from './index.js';
+import { utils } from './core_utils.ts';
 
 // Constants
 const MAX_BITS_ERROR = 3; // Up to 3 bit errors in version/format
@@ -177,7 +177,7 @@ type Runs = number[];
  * @returns
  */
 function pattern(p: boolean[], size?: number[]) {
-  const _size = size || fillArr(p.length, 1);
+  const _size = size || utils.fillArr(p.length, 1);
   if (p.length !== _size.length) throw new Error('invalid pattern');
   if (!(p.length & 1)) throw new Error('invalid pattern, length should be odd');
   const res = {
@@ -185,7 +185,7 @@ function pattern(p: boolean[], size?: number[]) {
     length: p.length,
     pattern: p,
     size: _size,
-    runs: () => fillArr(p.length, 0),
+    runs: () => utils.fillArr(p.length, 0),
     totalSize: sum(_size),
     total: (runs: Runs) => runs.reduce((acc, i) => acc + i),
     shift: (runs: Runs, n: number) => {
@@ -372,7 +372,7 @@ function findFinder(b: Bitmap): {
   const flen = found.length;
   if (flen < 3) throw new Error(`Finder: len(found) = ${flen}`);
   found.sort((i, j) => i.moduleSize - j.moduleSize);
-  const pBest = best<[Pattern, Pattern, Pattern]>();
+  const pBest = utils.best<[Pattern, Pattern, Pattern]>();
   // Qubic complexity, but we stop search when we found 3 patterns, so not a problem
   for (let i = 0; i < flen - 2; i++) {
     const fi = found[i];
@@ -533,9 +533,12 @@ function moduleSizeAvg(b: Bitmap, p1: Point, p2: Point) {
   return (est1 + est2) / (2 * FINDER.totalSize);
 }
 
+// Modify detect to return moduleSize and transformMatrix as well
 function detect(b: Bitmap): {
   bits: Bitmap;
   points: FinderPoints;
+  moduleSize: number;
+  transformMatrix: number[][];
 } {
   const { bl, tl, tr } = findFinder(b);
   const moduleSize = (moduleSizeAvg(b, tl, tr) + moduleSizeAvg(b, tl, bl)) / 2;
@@ -550,13 +553,13 @@ function detect(b: Bitmap): {
   else if (rem === 2)
     size--; // -> 1
   else if (rem === 3) size -= 2;
-  const version = info.size.decode(size);
-  validateVersion(version);
+  const version = utils.info.size.decode(size);
+  utils.validateVersion(version);
   let alignmentPattern;
-  if (info.alignmentPatterns(version).length > 0) {
+  if (utils.info.alignmentPatterns(version).length > 0) {
     // Bottom right estimate
     const br = { x: tr.x - tl.x + bl.x, y: tr.y - tl.y + bl.y };
-    const c = 1.0 - 3.0 / (info.size.encode(version) - 7);
+    const c = 1.0 - 3.0 / (utils.info.size.encode(version) - 7);
     // Estimated alignment pattern position
     const est = {
       x: int(tl.x + c * (br.x - tl.x)),
@@ -584,8 +587,15 @@ function detect(b: Bitmap): {
     toBR = { x: size - 3.5, y: size - 3.5 };
   }
   const from: FinderPoints = [tl, tr, br, bl];
-  const bits = transform(b, size, from, [toTL, toTR, toBR, toBL]);
-  return { bits: bits, points: from };
+  // Update call to transform and destructure result
+  const { bitmap: bits, matrix: transformMatrix } = transform(b, size, from, [
+    toTL,
+    toTR,
+    toBR,
+    toBL,
+  ]);
+  // Update return object
+  return { bits: bits, points: from, moduleSize: moduleSize, transformMatrix: transformMatrix };
 }
 
 // Perspective transform by 4 points
@@ -612,7 +622,13 @@ function squareToQuadrilateral(p: Point4) {
 }
 
 // Transform quadrilateral to square by 4 points
-function transform(b: Bitmap, size: number, from: Point4, to: Point4): Bitmap {
+// Returns the transformed bitmap and the transformation matrix
+function transform(
+  b: Bitmap,
+  size: number,
+  from: Point4,
+  to: Point4
+): { bitmap: Bitmap; matrix: number[][] } {
   // TODO: check
   // https://math.stackexchange.com/questions/13404/mapping-irregular-quadrilateral-to-a-rectangle
   const p = squareToQuadrilateral(to);
@@ -639,7 +655,7 @@ function transform(b: Bitmap, size: number, from: Point4, to: Point4): Bitmap {
   );
 
   const res = new Bitmap(size);
-  const points = fillArr(2 * size, 0);
+  const points = utils.fillArr(2 * size, 0);
   const pointsLength = points.length;
   for (let y = 0; y < size; y++) {
     const p = transform;
@@ -656,12 +672,19 @@ function transform(b: Bitmap, size: number, from: Point4, to: Point4): Bitmap {
       if (b.data[py][px]) res.data[y][i / 2] = true;
     }
   }
-  return res;
+  // Return both the bitmap and the calculated transform matrix
+  return { bitmap: res, matrix: transform };
 }
 
 // Same as in drawTemplate, but reading
 // TODO: merge in CoderType?
-function readInfoBits(b: Bitmap) {
+// Add explicit return type
+function readInfoBits(b: Bitmap): {
+  version1: number;
+  version2: number;
+  format1: number;
+  format2: number;
+} {
   const readBit = (x: number, y: number, out: number) => (out << 1) | (b.data[y][x] ? 1 : 0);
   const size = b.height;
   // Version information
@@ -681,10 +704,12 @@ function readInfoBits(b: Bitmap) {
   let format2 = 0;
   for (let y = size - 1; y >= size - 7; y--) format2 = readBit(8, y, format2);
   for (let x = size - 8; x < size; x++) format2 = readBit(x, 8, format2);
-  return { version1, version2, format1, format2 };
+  // Return explicitly without shorthand
+  return { version1: version1, version2: version2, format1: format1, format2: format2 };
 }
 
-function parseInfo(b: Bitmap) {
+// Add explicit return type
+function parseInfo(b: Bitmap): { version: number; ecc: ErrorCorrection; mask: Mask } {
   // Population count over xor -> hamming distance
   const popcnt = (a: number) => {
     let cnt = 0;
@@ -698,10 +723,10 @@ function parseInfo(b: Bitmap) {
   const { version1, version2, format1, format2 } = readInfoBits(b);
   // Guess format
   let format;
-  const bestFormat = best<{ ecc: ErrorCorrection; mask: Mask }>();
+  const bestFormat = utils.best<{ ecc: ErrorCorrection; mask: Mask }>();
   for (const ecc of ['medium', 'low', 'high', 'quartile'] as const) {
     for (let mask: Mask = 0; mask < 8; mask++) {
-      const bits = info.formatBits(ecc, mask as Mask);
+      const bits = utils.info.formatBits(ecc, mask as Mask);
       const cur = { ecc, mask: mask as Mask };
       if (bits === format1 || bits === format2) {
         format = cur;
@@ -713,14 +738,14 @@ function parseInfo(b: Bitmap) {
   }
   if (format === undefined && bestFormat.score() <= MAX_BITS_ERROR) format = bestFormat.get();
   if (format === undefined) throw new Error('invalid format pattern');
-  let version: number | undefined = info.size.decode(size); // Guess version based on bitmap size
-  if (version < 7) validateVersion(version);
+  let version: number | undefined = utils.info.size.decode(size); // Guess version based on bitmap size
+  if (version < 7) utils.validateVersion(version);
   else {
     version = undefined;
     // Guess version
-    const bestVer = best<number>();
+    const bestVer = utils.best<number>();
     for (let ver = 7; ver <= 40; ver++) {
-      const bits = info.versionBits(ver);
+      const bits = utils.info.versionBits(ver);
       if (bits === version1 || bits === version2) {
         version = ver;
         break;
@@ -730,9 +755,10 @@ function parseInfo(b: Bitmap) {
     }
     if (version === undefined && bestVer.score() <= MAX_BITS_ERROR) version = bestVer.get();
     if (version === undefined) throw new Error('invalid version pattern');
-    if (info.size.encode(version) !== size) throw new Error('invalid version size');
+    if (utils.info.size.encode(version) !== size) throw new Error('invalid version size');
   }
-  return { version, ...format };
+  // Return explicitly without spread
+  return { version: version as number, ecc: format.ecc, mask: format.mask };
 }
 
 // Global symbols in both browsers and Node.js since v11
@@ -744,13 +770,13 @@ function decodeBitmap(b: Bitmap): string {
   if (size < 21 || (size & 0b11) !== 1 || size !== b.width)
     throw new Error(`decode: invalid size=${size}`);
   const { version, mask, ecc } = parseInfo(b);
-  const tpl = drawTemplate(version, ecc, mask);
-  const { total } = info.capacity(version, ecc);
+  const tpl = utils.drawTemplate(version, ecc, mask);
+  const { total } = utils.info.capacity(version, ecc);
   const bytes = new Uint8Array(total);
   let pos = 0;
   let buf = 0;
   let bitPos = 0;
-  zigzag(tpl, mask, (x, y, m) => {
+  utils.zigzag(tpl, mask, (x, y, m) => {
     bitPos++;
     buf <<= 1;
     buf |= +(!!b.data[y][x] !== m);
@@ -760,8 +786,8 @@ function decodeBitmap(b: Bitmap): string {
     buf = 0;
   });
   if (pos !== total) throw new Error(`decode: pos=${pos}, total=${total}`);
-  let bits = Array.from(interleave(version, ecc).decode(bytes))
-    .map((i) => bin(i, 8))
+  let bits = Array.from(utils.interleave(version, ecc).decode(bytes))
+    .map((i) => utils.bin(i, 8))
     .join('');
   // Reverse operation of index.ts/encode working on bits
   const readBits = (n: number) => {
@@ -787,7 +813,7 @@ function decodeBitmap(b: Bitmap): string {
     const mode = modes[modeBits];
     if (mode === undefined) throw new Error(`Unknown modeBits=${modeBits} res="${res}"`);
     if (mode === 'terminator') break;
-    const countBits = info.lengthBits(version, mode);
+    const countBits = utils.info.lengthBits(version, mode);
     let count = toNum(readBits(countBits));
     if (mode === 'numeric') {
       while (count >= 3) {
@@ -808,10 +834,11 @@ function decodeBitmap(b: Bitmap): string {
     } else if (mode === 'alphanumeric') {
       while (count >= 2) {
         const v = toNum(readBits(11));
-        res += info.alphabet.alphanumerc.encode([Math.floor(v / 45), v % 45]).join('');
+        res += utils.info.alphabet.alphanumeric.encode([Math.floor(v / 45), v % 45]).join('');
         count -= 2;
       }
-      if (count === 1) res += info.alphabet.alphanumerc.encode([toNum(readBits(6))]).join('');
+      if (count === 1)
+        res += utils.info.alphabet.alphanumeric.encode([toNum(readBits(6))]).join('');
     } else if (mode === 'byte') {
       let utf8 = [];
       for (let i = 0; i < count; i++) utf8.push(Number(`0b${readBits(8)}`));
@@ -870,27 +897,31 @@ export function decodeQR(img: Image, opts: DecodeOpts = {}): string {
   if (opts.cropToSquare) ({ img, offset } = cropToSquare(img));
   const bmp = toBitmap(img);
   if (opts.imageOnBitmap) opts.imageOnBitmap(bmp.toImage());
-  const { bits, points } = detect(bmp);
+  // Update call to detect to get new return values
+  // Comment out unused variables for now
+  const { bits, points /*, moduleSize, transformMatrix */ } = detect(bmp);
   if (opts.pointsOnDetect) {
     // Handle the mixed types in FinderPoints: [Pattern, Pattern, Point, Pattern]
+    // Be fully explicit to avoid shorthand/spread issues
     const p = points.map((i, index) => {
-        const addedPoint = pointAdd(i, offset);
-        if (index === 2) { // The third element (index 2) is the Point (BR estimate)
-            return addedPoint; // Just return the offset-adjusted Point
-        } else { // The other elements are Patterns
-            // Cast 'i' to Pattern here, assuming it's safe because index !== 2
-            const patternElement = i as Pattern;
-            return {
-                x: addedPoint.x,
-                y: addedPoint.y,
-                moduleSize: patternElement.moduleSize,
-                count: patternElement.count,
-            };
-        }
-    }); // Remove 'as FinderPoints' assertion
-    // Note: This might cause type issues later if opts.pointsOnDetect strictly expects the tuple.
-    // We might need to cast 'p' when calling opts.pointsOnDetect if necessary.
-    opts.pointsOnDetect(p as FinderPoints); // Add assertion here instead? Or check opts.pointsOnDetect signature. Let's try asserting here.
+      const addedPoint = pointAdd(i, offset);
+      if (index === 2) {
+        // The third element (index 2) is the Point (BR estimate)
+        // Return only x, y for the Point
+        return { x: addedPoint.x, y: addedPoint.y };
+      } else {
+        // The other elements are Patterns
+        // Explicitly access properties assuming 'i' is Pattern
+        return {
+          x: addedPoint.x,
+          y: addedPoint.y,
+          moduleSize: (i as Pattern).moduleSize, // Use type assertion for access
+          count: (i as Pattern).count, // Use type assertion for access
+        };
+      }
+    });
+    // Cast the result array back to FinderPoints when calling the callback
+    opts.pointsOnDetect(p as FinderPoints);
   }
   if (opts.imageOnDetect) opts.imageOnDetect(bits.toImage());
   const res = decodeBitmap(bits);
@@ -901,11 +932,18 @@ export function decodeQR(img: Image, opts: DecodeOpts = {}): string {
 export default decodeQR;
 
 // Define the type for the exported test utilities explicitly
+// Update detect signature in the type
 type DecodeTestsType = {
+  [x: string]: any;
   toBitmap: typeof toBitmap;
   decodeBitmap: typeof decodeBitmap;
   findFinder: typeof findFinder;
-  detect: typeof detect;
+  detect: (b: Bitmap) => {
+    bits: Bitmap;
+    points: FinderPoints;
+    moduleSize: number;
+    transformMatrix: number[][];
+  };
   parseInfo: typeof parseInfo;
   readInfoBits: typeof readInfoBits;
 };
@@ -916,7 +954,7 @@ export const _tests: DecodeTestsType = {
   toBitmap: toBitmap,
   decodeBitmap: decodeBitmap,
   findFinder: findFinder,
-  detect: detect,
+  detect: detect, // Assign the modified detect function
   parseInfo: parseInfo,
   readInfoBits: readInfoBits,
 };

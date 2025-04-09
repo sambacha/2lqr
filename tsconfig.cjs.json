@@ -2,12 +2,13 @@
   "extends": "@paulmillr/jsbt/tsconfig.cjs.json",
   "compilerOptions": {
     "baseUrl": ".",
-    "outDir": ".",
+    "outDir": "./cjs",
     "lib": [
       "dom",
       "es2020"
     ],
-    "isolatedDeclarations": true
+    "isolatedDeclarations": true,
+    "noUnusedLocals": false
   },
   "include": [
     "src"

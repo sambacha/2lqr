@@ -49,7 +49,7 @@ export function qarySymbolsToBytes(symbols: number[]): Uint8Array {
   if (terminatorIndex === -1) {
     // This case should ideally not happen if encoding was done correctly
     // but handle it defensively. Maybe return empty or throw?
-    console.warn("No terminator bit found in q-ary symbol stream.");
+    console.warn('No terminator bit found in q-ary symbol stream.');
     return new Uint8Array();
   }
 

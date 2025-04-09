@@ -3,13 +3,14 @@
   "compilerOptions": {
     "declaration": true, // Added: Required by isolatedDeclarations
     "baseUrl": ".",
-//. "outDir": "esm",
-    "outDir": "vite-example/dist", 
+    "outDir": "esm",
+    // "outDir": "vite-example/dist", // Reverted for standalone HTML
     "lib": [
       "dom",
       "es2020"
     ],
-    "isolatedDeclarations": true
+    "isolatedDeclarations": true,
+    "noUnusedLocals": false
   },
   "include": [
     "src/**/*.ts"

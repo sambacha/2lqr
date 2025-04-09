@@ -19,7 +19,7 @@ function initializeTables() {
     x <<= 1;
     if (x >= FIELD_SIZE) {
       x ^= PRIMITIVE_POLYNOMIAL;
-      x &= (FIELD_SIZE - 1); // Ensure it stays within field bounds
+      x &= FIELD_SIZE - 1; // Ensure it stays within field bounds
     }
   }
   // logTable[0] is undefined (log of 0 is infinity), often represented as -1 or similar
@@ -68,7 +68,7 @@ export function power(a: number, exponent: number): number {
  */
 export function inverse(a: number): number {
   if (a === 0) {
-    throw new Error("Cannot compute inverse of 0");
+    throw new Error('Cannot compute inverse of 0');
   }
   const logA = logTable[a];
   const logInverse = (FIELD_SIZE - 1 - logA) % (FIELD_SIZE - 1);
@@ -88,14 +88,14 @@ export function inverse(a: number): number {
  */
 // Explicitly type the return value to help with type inference downstream
 function trimLeadingZeros(poly: Uint16Array): Uint16Array<ArrayBuffer> {
-    let firstNonZero = 0;
-    while (firstNonZero < poly.length && poly[firstNonZero] === 0) {
-        firstNonZero++;
-    }
-    // Ensure ALL return paths explicitly create a new Uint16Array backed by ArrayBuffer
-    if (firstNonZero === 0) return new Uint16Array(poly);
-    if (firstNonZero === poly.length) return new Uint16Array([0]); // All zeros
-    return new Uint16Array(poly.slice(firstNonZero));
+  let firstNonZero = 0;
+  while (firstNonZero < poly.length && poly[firstNonZero] === 0) {
+    firstNonZero++;
+  }
+  // Ensure ALL return paths explicitly create a new Uint16Array backed by ArrayBuffer
+  if (firstNonZero === 0) return new Uint16Array(poly);
+  if (firstNonZero === poly.length) return new Uint16Array([0]); // All zeros
+  return new Uint16Array(poly.slice(firstNonZero));
 }
 
 /**
@@ -108,8 +108,8 @@ export function polyAdd(a: Uint16Array, b: Uint16Array): Uint16Array<ArrayBuffer
   const result = new Uint16Array(resultDegree + 1);
 
   for (let i = 0; i <= resultDegree; i++) {
-    const termA = (i <= degreeA) ? a[degreeA - i] : 0; // Coefficient of x^i in a
-    const termB = (i <= degreeB) ? b[degreeB - i] : 0; // Coefficient of x^i in b
+    const termA = i <= degreeA ? a[degreeA - i] : 0; // Coefficient of x^i in a
+    const termB = i <= degreeB ? b[degreeB - i] : 0; // Coefficient of x^i in b
     result[resultDegree - i] = add(termA, termB);
   }
   return trimLeadingZeros(result);
@@ -132,7 +132,7 @@ export function polyMultiply(a: Uint16Array, b: Uint16Array): Uint16Array<ArrayB
       const coeffA = a[i];
       const coeffB = b[j];
       const termProduct = multiply(coeffA, coeffB);
-      const termDegree = (degreeA - i) + (degreeB - j);
+      const termDegree = degreeA - i + (degreeB - j);
       const resultIndex = resultDegree - termDegree;
       result[resultIndex] = add(result[resultIndex], termProduct);
     }
@@ -144,24 +144,26 @@ export function polyMultiply(a: Uint16Array, b: Uint16Array): Uint16Array<ArrayB
  * Multiplies a polynomial by a scalar in GF(1024).
  */
 export function polyMultiplyScalar(poly: Uint16Array, scalar: number): Uint16Array {
-    if (scalar === 0) return new Uint16Array([0]);
-    if (scalar === 1) return poly;
-    const result = new Uint16Array(poly.length);
-    for (let i = 0; i < poly.length; i++) {
-        result[i] = multiply(poly[i], scalar);
-    }
-    // No need to trim zeros here as scalar multiplication doesn't change degree unless scalar is 0
-    return result;
+  if (scalar === 0) return new Uint16Array([0]);
+  if (scalar === 1) return poly;
+  const result = new Uint16Array(poly.length);
+  for (let i = 0; i < poly.length; i++) {
+    result[i] = multiply(poly[i], scalar);
+  }
+  // No need to trim zeros here as scalar multiplication doesn't change degree unless scalar is 0
+  return result;
 }
-
 
 /**
  * Divides polynomial 'dividend' by 'divisor' in GF(1024).
  * Returns { quotient, remainder }.
  */
-export function polyDivide(dividend: Uint16Array, divisor: Uint16Array): { quotient: Uint16Array, remainder: Uint16Array } {
+export function polyDivide(
+  dividend: Uint16Array,
+  divisor: Uint16Array
+): { quotient: Uint16Array; remainder: Uint16Array } {
   if (divisor.length === 1 && divisor[0] === 0) {
-    throw new Error("Division by zero polynomial");
+    throw new Error('Division by zero polynomial');
   }
 
   // Explicitly type currentDividend
@@ -182,11 +184,11 @@ export function polyDivide(dividend: Uint16Array, divisor: Uint16Array): { quoti
   for (let i = 0; i <= quotientDegree; i++) {
     // Check the lead term *before* potentially slicing and reassigning
     if (currentDividend[0] === 0) {
-        // quotient term is 0, shift dividend by creating a new Uint16Array from the slice
-         const slicedDividend = currentDividend.slice(1);
-         currentDividend = trimLeadingZeros(new Uint16Array(slicedDividend));
-         if (currentDividend.length === 1 && currentDividend[0] === 0) break; // Dividend is zero
-         continue;
+      // quotient term is 0, shift dividend by creating a new Uint16Array from the slice
+      const slicedDividend = currentDividend.slice(1);
+      currentDividend = trimLeadingZeros(new Uint16Array(slicedDividend));
+      if (currentDividend.length === 1 && currentDividend[0] === 0) break; // Dividend is zero
+      continue;
     }
     const leadDividendTerm = currentDividend[0]; // Now get the lead term
 
@@ -202,23 +204,22 @@ export function polyDivide(dividend: Uint16Array, divisor: Uint16Array): { quoti
     // Use subtractDegree here: termToSubtract.length = subtractDegree + 1
     const shift = currentDividend.length - (subtractDegree + 1);
 
-    for(let k=0; k < termToSubtract.length; k++) {
-        alignedDividend[k+shift] = termToSubtract[k];
+    for (let k = 0; k < termToSubtract.length; k++) {
+      alignedDividend[k + shift] = termToSubtract[k];
     }
 
     currentDividend = polyAdd(currentDividend, alignedDividend); // Add is XOR, so it's subtraction
     currentDividend = trimLeadingZeros(currentDividend); // Trim leading zeros after subtraction
 
-     // Optimization: if remainder degree is less than divisor degree, we are done
-     if (currentDividend.length - 1 < divisorDegree) {
-        break;
-     }
+    // Optimization: if remainder degree is less than divisor degree, we are done
+    if (currentDividend.length - 1 < divisorDegree) {
+      break;
+    }
   }
 
   // Ensure remainder is explicitly ArrayBuffer-backed
   return { quotient: trimLeadingZeros(quotient), remainder: new Uint16Array(currentDividend) };
 }
-
 
 /**
  * Evaluates a polynomial at a point x in GF(1024) using Horner's method.
@@ -243,7 +244,7 @@ export function polyEval(poly: Uint16Array, x: number): number {
  */
 export function buildGeneratorPoly(numEccSymbols: number): Uint16Array<ArrayBuffer> {
   if (numEccSymbols <= 0) {
-    throw new Error("Number of ECC symbols must be positive");
+    throw new Error('Number of ECC symbols must be positive');
   }
   // alpha = 2 is primitive element for x^10+x^3+1
   const alpha = 2;

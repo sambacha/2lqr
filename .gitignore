@@ -21,3 +21,6 @@ coverage/
 /esm
 /dist
 /types
+vite-example/
+*.d.ts
+*.map

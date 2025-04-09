@@ -1,7 +1,6 @@
 import type { Version, Point } from '../index.js';
-import { Bitmap, utils } from '../index.js';
-
-const { info } = utils;
+import { Bitmap } from '../index.js';
+import { utils } from '../core_utils.ts';
 
 /**
  * Returns coordinates of all black modules in a bitmap.
@@ -31,7 +30,7 @@ export function getProtectedCoordinates(version: Version, size: number): Set<str
       for (let x = p.x; x < p.x + s.width; x++) {
         // Ensure coordinates are within bounds, although they should be by calculation
         if (x >= 0 && x < size && y >= 0 && y < size) {
-           addPoint({ x, y });
+          addPoint({ x, y });
         }
       }
     }
@@ -43,14 +42,14 @@ export function getProtectedCoordinates(version: Version, size: number): Set<str
   addRect({ x: 0, y: size - 8 }, { width: 8, height: 8 }); // Bottom-left
 
   // Alignment Patterns (5x5 areas)
-  const alignPos = info.alignmentPatterns(version);
+  const alignPos = utils.info.alignmentPatterns(version);
   for (const y of alignPos) {
     for (const x of alignPos) {
       // Check if the center of the alignment pattern overlaps with finder patterns
       if (
-        (x < 8 && y < 8) ||             // Top-left finder
-        (x >= size - 8 && y < 8) ||       // Top-right finder
-        (x < 8 && y >= size - 8)        // Bottom-left finder
+        (x < 8 && y < 8) || // Top-left finder
+        (x >= size - 8 && y < 8) || // Top-right finder
+        (x < 8 && y >= size - 8) // Bottom-left finder
       ) {
         continue; // Skip drawing alignment pattern here
       }
@@ -92,7 +91,6 @@ export function getProtectedCoordinates(version: Version, size: number): Set<str
   return protectedCoords;
 }
 
-
 /**
  * Returns coordinates of black modules that can be replaced with patterns.
  * Excludes finder, alignment, timing, format, and version info areas.
@@ -101,12 +99,14 @@ export function getReplaceableModules(bitmap: Bitmap, version: Version): Point[]
   const size = bitmap.width;
   if (size !== bitmap.height) throw new Error('Bitmap must be square');
   // Validate version against size only if version is provided and valid
-  if (version >= 1 && version <= 40 && info.size.encode(version) !== size) {
-      throw new Error(`Bitmap size (${size}x${size}) does not match version ${version} (${info.size.encode(version)}x${info.size.encode(version)})`);
+  if (version >= 1 && version <= 40 && utils.info.size.encode(version) !== size) {
+    throw new Error(
+      `Bitmap size (${size}x${size}) does not match version ${version} (${utils.info.size.encode(version)}x${utils.info.size.encode(version)})`
+    );
   }
 
   const blackModules = getBlackModules(bitmap);
   const protectedCoords = getProtectedCoordinates(version, size);
 
-  return blackModules.filter(p => !protectedCoords.has(`${p.y},${p.x}`));
+  return blackModules.filter((p) => !protectedCoords.has(`${p.y},${p.x}`));
 }

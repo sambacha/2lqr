@@ -9,7 +9,7 @@ import * as GF from './gf1024.js';
  */
 export function encode(message: Uint16Array, numEccSymbols: number): Uint16Array {
   if (numEccSymbols <= 0) {
-    throw new Error("Number of ECC symbols must be positive.");
+    throw new Error('Number of ECC symbols must be positive.');
   }
 
   const generator = GF.buildGeneratorPoly(numEccSymbols);

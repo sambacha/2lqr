@@ -4,12 +4,12 @@
  * @returns A function that returns the next pseudo-random number between 0 (inclusive) and 1 (exclusive).
  */
 function mulberry32(seed: number) {
-  return function() {
-    let t = seed += 0x6D2B79F5;
-    t = Math.imul(t ^ t >>> 15, t | 1);
-    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  }
+  return function () {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 /**
@@ -17,15 +17,14 @@ function mulberry32(seed: number) {
  * Simple approach: XOR bytes together. More robust methods exist.
  */
 function seedToInt32(seedBytes: Uint8Array): number {
-    let seedInt = 0;
-    for (let i = 0; i < seedBytes.length; i++) {
-        // Combine bytes, shifting and XORing to mix bits
-        seedInt = (seedInt << 8) | (seedInt >>> 24); // Rotate left by 8 bits
-        seedInt ^= seedBytes[i];
-    }
-    return seedInt | 0; // Ensure it's treated as a 32-bit integer
+  let seedInt = 0;
+  for (let i = 0; i < seedBytes.length; i++) {
+    // Combine bytes, shifting and XORing to mix bits
+    seedInt = (seedInt << 8) | (seedInt >>> 24); // Rotate left by 8 bits
+    seedInt ^= seedBytes[i];
+  }
+  return seedInt | 0; // Ensure it's treated as a 32-bit integer
 }
-
 
 /**
  * Generates a permutation of numbers [0, 1, ..., n-1] based on a seed.
@@ -79,19 +78,19 @@ export function generatePermutation(seedBytes: Uint8Array, n: number): number[] 
  * result[i] = source[permutation[i]]
  */
 export function applyPermutation<T>(source: T[], permutation: number[]): T[] {
-    if (source.length !== permutation.length) {
-        throw new Error("Source array and permutation must have the same length.");
+  if (source.length !== permutation.length) {
+    throw new Error('Source array and permutation must have the same length.');
+  }
+  const n = source.length;
+  const result = new Array<T>(n);
+  for (let i = 0; i < n; i++) {
+    const sourceIndex = permutation[i];
+    if (sourceIndex < 0 || sourceIndex >= n) {
+      throw new Error(`Invalid index ${sourceIndex} in permutation for length ${n}.`);
     }
-    const n = source.length;
-    const result = new Array<T>(n);
-    for (let i = 0; i < n; i++) {
-        const sourceIndex = permutation[i];
-        if (sourceIndex < 0 || sourceIndex >= n) {
-             throw new Error(`Invalid index ${sourceIndex} in permutation for length ${n}.`);
-        }
-        result[i] = source[sourceIndex];
-    }
-    return result;
+    result[i] = source[sourceIndex];
+  }
+  return result;
 }
 
 /**
@@ -99,17 +98,17 @@ export function applyPermutation<T>(source: T[], permutation: number[]): T[] {
  * result[permutation[i]] = source[i]
  */
 export function applyInversePermutation<T>(source: T[], permutation: number[]): T[] {
-    if (source.length !== permutation.length) {
-        throw new Error("Source array and permutation must have the same length.");
+  if (source.length !== permutation.length) {
+    throw new Error('Source array and permutation must have the same length.');
+  }
+  const n = source.length;
+  const result = new Array<T>(n);
+  for (let i = 0; i < n; i++) {
+    const targetIndex = permutation[i];
+    if (targetIndex < 0 || targetIndex >= n) {
+      throw new Error(`Invalid index ${targetIndex} in permutation for length ${n}.`);
     }
-    const n = source.length;
-    const result = new Array<T>(n);
-    for (let i = 0; i < n; i++) {
-        const targetIndex = permutation[i];
-         if (targetIndex < 0 || targetIndex >= n) {
-             throw new Error(`Invalid index ${targetIndex} in permutation for length ${n}.`);
-        }
-        result[targetIndex] = source[i];
-    }
-    return result;
+    result[targetIndex] = source[i];
+  }
+  return result;
 }

@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>2LQR Encode/Decode Tool</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.5; padding: 1em; max-width: 800px; margin: auto; }
+        section { border: 1px solid #ccc; padding: 1em; margin-bottom: 1em; }
+        h1, h2 { margin-top: 0; }
+        label { display: block; margin-bottom: 0.2em; font-weight: bold; }
+        input[type="text"], textarea { width: 95%; padding: 0.4em; margin-bottom: 0.8em; border: 1px solid #ccc; }
+        textarea { height: 4em; }
+        button { padding: 0.5em 1em; margin-right: 0.5em; cursor: pointer; }
+        #qr-code-output svg { width: 250px; height: 250px; border: 1px solid #eee; }
+        #image-preview { max-width: 200px; max-height: 200px; border: 1px solid #eee; display: none; margin-top: 0.5em;}
+        pre { background-color: #f4f4f4; padding: 0.5em; border: 1px solid #ddd; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+        .error { color: red; font-weight: bold; }
+        .status { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>2LQR Encode/Decode Tool</h1>
+    <p><strong>Note:</strong> Requires running <code>npm run build</code> first.</p>
+    <p><strong>Limitation:</strong> Due to GF(8) block size, private data + ECC symbols must be <= 7 symbols total.</p>
+
+    <!-- Encoding Section -->
+    <section id="encoder">
+        <h2>Encode</h2>
+        <div>
+            <label for="public-data">Public Data:</label>
+            <textarea id="public-data">Public Info</textarea>
+        </div>
+        <div>
+            <label for="private-data">Private Data:</label>
+            <textarea id="private-data">PV</textarea> <!-- Keep short due to GF(8) limit -->
+        </div>
+        <div>
+            <label for="private-key-encode">Private Key:</label>
+            <input type="text" id="private-key-encode" value="secret_key" />
+        </div>
+         <div>
+            <label for="ecc-symbols-encode">ECC Symbols (Private):</label>
+            <input type="number" id="ecc-symbols-encode" value="2" min="1" max="6" />
+            <small>(1-6, Message Symbols + ECC Symbols <= 7)</small>
+        </div>
+        <button id="generate-button">Generate 2LQR Code</button>
+        <h3>Generated QR Code:</h3>
+        <div id="qr-code-output">
+            <!-- SVG will be inserted here -->
+        </div>
+        <pre id="encode-status"></pre>
+    </section>
+
+    <hr />
+
+    <!-- Decoding Section -->
+    <section id="decoder">
+        <h2>Decode</h2>
+        <div>
+            <label for="qr-image-upload">Upload 2LQR Code Image:</label>
+            <input type="file" id="qr-image-upload" accept="image/*" />
+        </div>
+        <img id="image-preview" src="#" alt="Image Preview" />
+        <div>
+            <label for="private-key-decode">Private Key:</label>
+            <input type="text" id="private-key-decode" value="secret_key" />
+        </div>
+         <div>
+            <label for="ecc-symbols-decode">ECC Symbols (Private):</label>
+            <input type="number" id="ecc-symbols-decode" value="2" min="1" max="6" />
+             <small>(Must match ECC symbols used during encoding)</small>
+        </div>
+        <button id="decode-button" disabled>Decode 2LQR Code</button>
+        <h3>Decoded Information:</h3>
+        <div>
+            <h4>Public Data:</h4>
+            <pre id="public-data-output">...</pre>
+        </div>
+        <div>
+            <h4>Private Data (Hex):</h4>
+            <pre id="private-data-output">...</pre>
+        </div>
+        <pre id="decode-status"></pre>
+    </section>
+
+    <script type="module">
+        // Import necessary functions (adjust path based on build output)
+        import { encode2LQR, decode2LQR } from './esm/index.js';
+        // Need TextDecoder for displaying decoded private data
+        const decoder = new TextDecoder();
+
+        // --- DOM Elements ---
+        const publicDataInput = document.getElementById('public-data');
+        const privateDataInput = document.getElementById('private-data');
+        const privateKeyEncodeInput = document.getElementById('private-key-encode');
+        const eccSymbolsEncodeInput = document.getElementById('ecc-symbols-encode');
+        const generateButton = document.getElementById('generate-button');
+        const qrCodeOutput = document.getElementById('qr-code-output');
+        const encodeStatus = document.getElementById('encode-status');
+
+        const qrImageUpload = document.getElementById('qr-image-upload');
+        const imagePreview = document.getElementById('image-preview');
+        const privateKeyDecodeInput = document.getElementById('private-key-decode');
+        const eccSymbolsDecodeInput = document.getElementById('ecc-symbols-decode');
+        const decodeButton = document.getElementById('decode-button');
+        const publicDataOutput = document.getElementById('public-data-output');
+        const privateDataOutput = document.getElementById('private-data-output');
+        const decodeStatus = document.getElementById('decode-status');
+
+        let imageDataForDecode = null;
+
+        // --- Encoding Logic ---
+        generateButton.addEventListener('click', async () => {
+            qrCodeOutput.innerHTML = '';
+            encodeStatus.textContent = 'Generating...';
+            encodeStatus.className = 'status';
+
+            const publicData = publicDataInput.value;
+            const privateData = privateDataInput.value;
+            const privateKey = privateKeyEncodeInput.value;
+            const eccWords = parseInt(eccSymbolsEncodeInput.value, 10);
+
+            if (!publicData || !privateData || !privateKey || isNaN(eccWords) || eccWords < 1 || eccWords > 6) {
+                encodeStatus.textContent = 'Error: Please fill in all fields and provide valid ECC symbols (1-6).';
+                encodeStatus.className = 'error';
+                return;
+            }
+
+            try {
+                // Encode using encode2LQR
+                const { bitmap, patternMap, version, mask } = await encode2LQR(publicData, {
+                    privateData: privateData,
+                    privateKey: privateKey,
+                    privateEccWords: eccWords,
+                    // Add other QR options if needed (ecc level, version, mask)
+                    // ecc: 'medium', // Example
+                });
+
+                // Render the result (using internal Bitmap toSVG with patternMap)
+                // Need to add border/scaling if desired, similar to encodeQR
+                const borderedBitmap = bitmap.border(2, false); // Add border=2, white=false(black)
+                const svgString = borderedBitmap.toSVG(patternMap); // Pass patternMap
+
+                qrCodeOutput.innerHTML = svgString;
+                encodeStatus.textContent = `Generated: Version ${version}, Mask ${mask}, ECC Symbols ${eccWords}`;
+                encodeStatus.className = 'status';
+
+            } catch (error) {
+                console.error("Encoding Error:", error);
+                encodeStatus.textContent = `Error: ${error.message}`;
+                encodeStatus.className = 'error';
+            }
+        });
+
+        // --- Decoding Logic ---
+        qrImageUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                imageDataForDecode = null;
+                imagePreview.style.display = 'none';
+                decodeButton.disabled = true;
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+
+                // Load image data for decoding
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const imageData = ctx.getImageData(0, 0, img.width, img.height);
+                    imageDataForDecode = {
+                        data: imageData.data, // Uint8ClampedArray
+                        width: img.width,
+                        height: img.height,
+                    };
+                    decodeButton.disabled = false;
+                    decodeStatus.textContent = 'Image loaded. Ready to decode.';
+                    decodeStatus.className = 'status';
+                };
+                img.onerror = () => {
+                     decodeStatus.textContent = 'Error loading image.';
+                     decodeStatus.className = 'error';
+                     imageDataForDecode = null;
+                     decodeButton.disabled = true;
+                }
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            // Clear previous results
+            publicDataOutput.textContent = '...';
+            privateDataOutput.textContent = '...';
+            decodeStatus.textContent = 'Loading image...';
+            decodeStatus.className = 'status';
+        });
+
+        decodeButton.addEventListener('click', async () => {
+            if (!imageDataForDecode) {
+                decodeStatus.textContent = 'Error: No image data loaded.';
+                decodeStatus.className = 'error';
+                return;
+            }
+
+            const privateKey = privateKeyDecodeInput.value;
+            const eccWords = parseInt(eccSymbolsDecodeInput.value, 10);
+
+             if (!privateKey || isNaN(eccWords) || eccWords < 1 || eccWords > 6) {
+                decodeStatus.textContent = 'Error: Please provide Private Key and ECC Symbols (1-6).';
+                decodeStatus.className = 'error';
+                return;
+            }
+
+
+            decodeStatus.textContent = 'Decoding...';
+            decodeStatus.className = 'status';
+            publicDataOutput.textContent = '...';
+            privateDataOutput.textContent = '...';
+
+
+            try {
+                const result = await decode2LQR(imageDataForDecode, {
+                    privateKey: privateKey,
+                    privateEccWords: eccWords
+                });
+
+                publicDataOutput.textContent = result.publicData;
+                // Convert privateData (Uint8Array) to hex string for display
+                privateDataOutput.textContent = Array.from(result.privateData).map(b => b.toString(16).padStart(2, '0')).join('');
+                // Or decode as text if appropriate:
+                // privateDataOutput.textContent = decoder.decode(result.privateData);
+                decodeStatus.textContent = `Decoded successfully: Version ${result.version}, ECC ${result.ecc}, Mask ${result.mask}`;
+                decodeStatus.className = 'status';
+
+            } catch (error) {
+                console.error("Decoding Error:", error);
+                decodeStatus.textContent = `Error: ${error.message}`;
+                decodeStatus.className = 'error';
+                publicDataOutput.textContent = 'Error';
+                privateDataOutput.textContent = 'Error';
+            }
+        });
+
+    </script>
+</body>
+</html>

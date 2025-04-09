@@ -16,13 +16,11 @@ export async function deriveKeyMaterial(
   length: number
 ): Promise<Uint8Array> {
   if (typeof crypto === 'undefined' || !crypto.subtle) {
-    throw new Error("Web Crypto API (crypto.subtle) is not available in this environment.");
+    throw new Error('Web Crypto API (crypto.subtle) is not available in this environment.');
   }
 
   // Get the source Uint8Array first
-  const ikmSource = (typeof inputKey === 'string')
-    ? new TextEncoder().encode(inputKey)
-    : inputKey;
+  const ikmSource = typeof inputKey === 'string' ? new TextEncoder().encode(inputKey) : inputKey;
 
   let ikmBuffer: ArrayBuffer;
 
@@ -36,19 +34,19 @@ export async function deriveKeyMaterial(
 
   // Import the input keying material for HKDF
   const rootKey = await crypto.subtle.importKey(
-    "raw",
+    'raw',
     ikmBuffer,
-    { name: "HKDF" },
+    { name: 'HKDF' },
     false, // not extractable
-    ["deriveBits"]
+    ['deriveBits']
   );
 
   // Derive the bits using HKDF
   // Algorithm details: Use SHA-256 as the hash function
   const derivedBits = await crypto.subtle.deriveBits(
     {
-      name: "HKDF",
-      hash: "SHA-256",
+      name: 'HKDF',
+      hash: 'SHA-256',
       salt: salt, // Salt enhances security, prevents rainbow table attacks
       info: info, // Context-specific information
     },
@@ -63,11 +61,11 @@ export async function deriveKeyMaterial(
  * A convenience function to derive key material with default salt/info.
  */
 export async function deriveKeyMaterialSimple(
-    inputKey: string | Uint8Array,
-    length: number
+  inputKey: string | Uint8Array,
+  length: number
 ): Promise<Uint8Array> {
-    // Using empty salt and info for simplicity in this example.
-    // For better security, consider using non-empty, context-specific salt/info.
-    const empty = new Uint8Array();
-    return deriveKeyMaterial(inputKey, empty, empty, length);
+  // Using empty salt and info for simplicity in this example.
+  // For better security, consider using non-empty, context-specific salt/info.
+  const empty = new Uint8Array();
+  return deriveKeyMaterial(inputKey, empty, empty, length);
 }
